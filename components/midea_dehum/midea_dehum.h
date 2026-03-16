@@ -5,7 +5,6 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/uart/uart.h"
-#include "esphome/components/climate/climate.h"
 #ifdef USE_MIDEA_DEHUM_BINARY_SENSOR
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #endif
@@ -40,7 +39,26 @@ namespace midea_dehum {
   float currentTemperature;
 };
 
+
 class MideaDehumComponent;
+#ifdef USE_MIDEA_DEHUM_POWER
+class MideaPowerSwitch;
+#endif
+#ifdef USE_MIDEA_DEHUM_SWING
+class MideaSwingSwitch;
+#endif
+#ifdef USE_MIDEA_DEHUM_HORIZONTAL_SWING
+class MideaHorizontalSwingSwitch;
+#endif
+#ifdef USE_MIDEA_DEHUM_MODE_SELECT
+class MideaModeSelect;
+#endif
+#ifdef USE_MIDEA_DEHUM_FAN_SPEED_SELECT
+class MideaFanSpeedSelect;
+#endif
+#ifdef USE_MIDEA_DEHUM_HUMIDITY_SETPOINT
+class MideaHumiditySetpointNumber;
+#endif
 #ifdef USE_MIDEA_DEHUM_FILTER_BUTTON
 class MideaFilterCleanedButton;
 #endif
@@ -132,9 +150,68 @@ class MideaTimerNumber : public number::Number, public Component {
 #endif
 
 // ─────────────── Main component ───────────────
-class MideaDehumComponent : public climate::Climate,
-                            public uart::UARTDevice,
-                            public Component {
+
+#ifdef USE_MIDEA_DEHUM_POWER
+class MideaPowerSwitch : public switch_::Switch, public Component {
+ public:
+  void set_parent(MideaDehumComponent *parent) { this->parent_ = parent; }
+ protected:
+  void write_state(bool state) override;
+  MideaDehumComponent *parent_{nullptr};
+};
+#endif
+
+#ifdef USE_MIDEA_DEHUM_SWING
+class MideaSwingSwitch : public switch_::Switch, public Component {
+ public:
+  void set_parent(MideaDehumComponent *parent) { this->parent_ = parent; }
+ protected:
+  void write_state(bool state) override;
+  MideaDehumComponent *parent_{nullptr};
+};
+#endif
+
+#ifdef USE_MIDEA_DEHUM_HORIZONTAL_SWING
+class MideaHorizontalSwingSwitch : public switch_::Switch, public Component {
+ public:
+  void set_parent(MideaDehumComponent *parent) { this->parent_ = parent; }
+ protected:
+  void write_state(bool state) override;
+  MideaDehumComponent *parent_{nullptr};
+};
+#endif
+
+#ifdef USE_MIDEA_DEHUM_MODE_SELECT
+class MideaModeSelect : public select::Select, public Component {
+ public:
+  void set_parent(MideaDehumComponent *parent) { this->parent_ = parent; }
+ protected:
+  void control(const std::string &value) override;
+  MideaDehumComponent *parent_{nullptr};
+};
+#endif
+
+#ifdef USE_MIDEA_DEHUM_FAN_SPEED_SELECT
+class MideaFanSpeedSelect : public select::Select, public Component {
+ public:
+  void set_parent(MideaDehumComponent *parent) { this->parent_ = parent; }
+ protected:
+  void control(const std::string &value) override;
+  MideaDehumComponent *parent_{nullptr};
+};
+#endif
+
+#ifdef USE_MIDEA_DEHUM_HUMIDITY_SETPOINT
+class MideaHumiditySetpointNumber : public number::Number, public Component {
+ public:
+  void set_parent(MideaDehumComponent *parent) { this->parent_ = parent; }
+ protected:
+  void control(float value) override;
+  MideaDehumComponent *parent_{nullptr};
+};
+#endif
+
+class MideaDehumComponent : public uart::UARTDevice, public Component {
  public:
   void set_uart(uart::UARTComponent *uart);
   void set_status_poll_interval(uint32_t interval_ms) { this->status_poll_interval_ = interval_ms; }
@@ -201,30 +278,46 @@ class MideaDehumComponent : public climate::Climate,
   void set_timer_hours(float hours, bool from_device);
 #endif
 
-  std::string display_mode_setpoint_{"Setpoint"};
-  std::string display_mode_continuous_{"Continuous"};
-  std::string display_mode_smart_{"Smart"};
-  std::string display_mode_clothes_drying_{"ClothesDrying"};
-
-  void set_display_mode_setpoint(const std::string &name) { display_mode_setpoint_ = name; }
-  void set_display_mode_continuous(const std::string &name) { display_mode_continuous_ = name; }
-  void set_display_mode_smart(const std::string &name) { display_mode_smart_ = name; }
-  void set_display_mode_clothes_drying(const std::string &name) { display_mode_clothes_drying_ = name; }
 
   void setup() override;
   void loop() override;
 
-  climate::ClimateTraits traits() override;
-  void control(const climate::ClimateCall &call) override;
-
   void parseState();
   void sendSetStatus();
-  void sendClimateState();
+
+#ifdef USE_MIDEA_DEHUM_CURRENT_HUMIDITY
+  void set_current_humidity_sensor(sensor::Sensor *s) { this->current_humidity_sensor_ = s; }
+#endif
+#ifdef USE_MIDEA_DEHUM_CURRENT_TEMPERATURE
+  void set_current_temperature_sensor(sensor::Sensor *s) { this->current_temperature_sensor_ = s; }
+#endif
+#ifdef USE_MIDEA_DEHUM_POWER
+  void set_power_switch(MideaPowerSwitch *s);
+  void set_power_state(bool on);
+#endif
+#ifdef USE_MIDEA_DEHUM_SWING
+  void set_swing_switch(MideaSwingSwitch *s);
+  void set_swing_state(bool on);
+#endif
+#ifdef USE_MIDEA_DEHUM_HORIZONTAL_SWING
+  void set_horizontal_swing_switch(MideaHorizontalSwingSwitch *s);
+  void set_horizontal_swing_state(bool on);
+#endif
+#ifdef USE_MIDEA_DEHUM_MODE_SELECT
+  void set_mode_select(MideaModeSelect *s);
+  void set_mode(uint8_t mode);
+#endif
+#ifdef USE_MIDEA_DEHUM_FAN_SPEED_SELECT
+  void set_fan_speed_select(MideaFanSpeedSelect *s);
+  void set_fan_speed(uint8_t fan_speed);
+#endif
+#ifdef USE_MIDEA_DEHUM_HUMIDITY_SETPOINT
+  void set_humidity_setpoint_number(MideaHumiditySetpointNumber *n);
+  void set_humidity_setpoint(uint8_t humidity_setpoint);
+#endif
+
+  void publishState();
   void handleUart();
-  void handleStateUpdateRequest(std::string requested_state,
-                                uint8_t mode,
-                                uint8_t fan_speed,
-                                uint8_t humidity_setpoint);
   void updateAndSendNetworkStatus(bool connected);
   void getStatus();
   void sendMessage(uint8_t msg_type,
@@ -326,6 +419,31 @@ class MideaDehumComponent : public climate::Climate,
   MideaCapabilitiesTextSensor *capabilities_text_{nullptr};
   bool capabilities_requested_{false};
 #endif
+#ifdef USE_MIDEA_DEHUM_CURRENT_HUMIDITY
+  sensor::Sensor *current_humidity_sensor_{nullptr};
+#endif
+#ifdef USE_MIDEA_DEHUM_CURRENT_TEMPERATURE
+  sensor::Sensor *current_temperature_sensor_{nullptr};
+#endif
+#ifdef USE_MIDEA_DEHUM_POWER
+  MideaPowerSwitch *power_switch_{nullptr};
+#endif
+#ifdef USE_MIDEA_DEHUM_SWING
+  MideaSwingSwitch *swing_switch_{nullptr};
+#endif
+#ifdef USE_MIDEA_DEHUM_HORIZONTAL_SWING
+  MideaHorizontalSwingSwitch *horizontal_swing_switch_{nullptr};
+#endif
+#ifdef USE_MIDEA_DEHUM_MODE_SELECT
+  MideaModeSelect *mode_select_{nullptr};
+#endif
+#ifdef USE_MIDEA_DEHUM_FAN_SPEED_SELECT
+  MideaFanSpeedSelect *fan_speed_select_{nullptr};
+#endif
+#ifdef USE_MIDEA_DEHUM_HUMIDITY_SETPOINT
+  MideaHumiditySetpointNumber *humidity_setpoint_number_{nullptr};
+#endif
+
 
 };
 

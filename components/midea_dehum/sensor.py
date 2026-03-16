@@ -12,6 +12,10 @@ CONF_ERROR = "error"
 CONF_TANK_LEVEL = 'tank_level'
 CONF_PM25 = 'pm25'
 
+
+CONF_CURRENT_HUMIDITY = "current_humidity"
+CONF_CURRENT_TEMPERATURE = "current_temperature"
+
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(MideaDehum),
     cv.Required(CONF_MIDEA_DEHUM_ID): cv.use_id(MideaDehum),
@@ -28,7 +32,18 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_PM25): sensor.sensor_schema(
         device_class=DEVICE_CLASS_PM25,
     ),
+    cv.Optional(CONF_CURRENT_HUMIDITY): sensor.sensor_schema(
+        unit_of_measurement=UNIT_PERCENT,
+        device_class="humidity",
+        accuracy_decimals=0,
+    ),
+    cv.Optional(CONF_CURRENT_TEMPERATURE): sensor.sensor_schema(
+        unit_of_measurement="°C",
+        device_class="temperature",
+        accuracy_decimals=1,
+    ),
 })
+
 
 async def to_code(config):
     parent = await cg.get_variable(config[CONF_MIDEA_DEHUM_ID])
@@ -47,3 +62,12 @@ async def to_code(config):
         cg.add_define("USE_MIDEA_DEHUM_PM25")
         pm25 = await sensor.new_sensor(config[CONF_PM25])
         cg.add(parent.set_pm25_sensor(pm25))
+    if CONF_CURRENT_HUMIDITY in config:
+        cg.add_define("USE_MIDEA_DEHUM_CURRENT_HUMIDITY")
+        sens = await sensor.new_sensor(config[CONF_CURRENT_HUMIDITY])
+        cg.add(parent.set_current_humidity_sensor(sens))
+
+    if CONF_CURRENT_TEMPERATURE in config:
+        cg.add_define("USE_MIDEA_DEHUM_CURRENT_TEMPERATURE")
+        sens = await sensor.new_sensor(config[CONF_CURRENT_TEMPERATURE])
+        cg.add(parent.set_current_temperature_sensor(sens))

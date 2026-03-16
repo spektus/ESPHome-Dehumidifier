@@ -810,7 +810,7 @@ void MideaDehumComponent::parseState() {
   if (new_error != this->error_state_) { this->error_state_ = new_error; updated = true; }
 
   if (updated || first_run) {
-    this->sendClimateState();
+    this->publishState();
   }
 
 #if defined(USE_MIDEA_DEHUM_ERROR) || defined(USE_MIDEA_DEHUM_BUCKET)
@@ -981,7 +981,7 @@ void MideaDehumComponent::parseState() {
   if (new_horizontal_swing_state != this->horizontal_swing_state_ || first_run) { 
     if(this->state_.powerOn) {
       this->horizontal_swing_state_ = new_horizontal_swing_state;
-      this->sendClimateState();
+      this->publishState();
     }
   }
 #endif
@@ -992,86 +992,13 @@ void MideaDehumComponent::parseState() {
   if (new_swing_state != this->swing_state_ || first_run) { 
     if(this->state_.powerOn) {
       this->swing_state_ = new_swing_state;
-      this->sendClimateState();
+      this->publishState();
     }
   }
 #endif
 
   this->clearRxBuf();
   first_run = false;
-}
-
-climate::ClimateTraits MideaDehumComponent::traits() {
-  climate::ClimateTraits t;
-  t.add_feature_flags(
-      climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE |
-      climate::CLIMATE_SUPPORTS_CURRENT_HUMIDITY |
-      climate::CLIMATE_SUPPORTS_TARGET_HUMIDITY
-  );
-
-  t.add_supported_mode(climate::CLIMATE_MODE_OFF);
-  t.add_supported_mode(climate::CLIMATE_MODE_DRY);
-
-  t.add_supported_fan_mode(climate::CLIMATE_FAN_LOW);
-  t.add_supported_fan_mode(climate::CLIMATE_FAN_MEDIUM);
-  t.add_supported_fan_mode(climate::CLIMATE_FAN_HIGH);
-
-#if defined(USE_MIDEA_DEHUM_SWING) || defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-  climate::ClimateSwingModeMask swing_modes;
-
-  swing_modes.insert(climate::CLIMATE_SWING_OFF);
-
-#if defined(USE_MIDEA_DEHUM_SWING)
-  swing_modes.insert(climate::CLIMATE_SWING_VERTICAL);
-#endif
-
-#if defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-  swing_modes.insert(climate::CLIMATE_SWING_HORIZONTAL);
-#endif
-
-#if defined(USE_MIDEA_DEHUM_SWING) && defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-  swing_modes.insert(climate::CLIMATE_SWING_BOTH);
-#endif
-  t.set_supported_swing_modes(swing_modes);
-#endif
-
-  t.set_visual_min_humidity(30.0f);
-  t.set_visual_max_humidity(80.0f);
-  
-  std::vector<const char *> custom_presets;
-  if (display_mode_setpoint_ != "UNUSED") custom_presets.push_back(display_mode_setpoint_.c_str());
-  if (display_mode_continuous_ != "UNUSED") custom_presets.push_back(display_mode_continuous_.c_str());
-  if (display_mode_smart_ != "UNUSED") custom_presets.push_back(display_mode_smart_.c_str());
-  if (display_mode_clothes_drying_ != "UNUSED") custom_presets.push_back(display_mode_clothes_drying_.c_str());
-
-  if (!custom_presets.empty()) {
-    t.set_supported_custom_presets(custom_presets);
-  }
-  return t;
-}
-
-void MideaDehumComponent::handleStateUpdateRequest(std::string requestedState, uint8_t mode, uint8_t fanSpeed, uint8_t humiditySetpoint) {
-  DehumidifierState newState = this->state_;
-
-  if (requestedState == "on") newState.powerOn = true;
-  else if (requestedState == "off") newState.powerOn = false;
-
-  if (mode < 1 || mode > 4) mode = 3;
-  newState.mode = mode;
-  newState.fanSpeed = fanSpeed;
-
-  if (humiditySetpoint && humiditySetpoint >= 35 && humiditySetpoint <= 85)
-    newState.humiditySetpoint = humiditySetpoint;
-
-  if (newState.powerOn != this->state_.powerOn ||
-      newState.mode != this->state_.mode ||
-      newState.fanSpeed != this->state_.fanSpeed ||
-      newState.humiditySetpoint != this->state_.humiditySetpoint) {
-
-    this->state_ = newState;
-    this->sendSetStatus();
-    this->sendClimateState();
-  }
 }
 
 void MideaDehumComponent::sendSetStatus() {
@@ -1193,72 +1120,6 @@ void MideaDehumComponent::sendSetStatus() {
   this->sendMessage(0x02, 0x03, 0x00, 25, setStatusCommand);
 }
 
-void MideaDehumComponent::sendClimateState(){
-      // Compute climate mode
-    this->mode = this->state_.powerOn ? climate::CLIMATE_MODE_DRY : climate::CLIMATE_MODE_OFF;
-
-    // Fan level mapping
-    if (this->state_.fanSpeed <= 50)
-      this->fan_mode = climate::CLIMATE_FAN_LOW;
-    else if (this->state_.fanSpeed <= 70)
-      this->fan_mode = climate::CLIMATE_FAN_MEDIUM;
-    else
-      this->fan_mode = climate::CLIMATE_FAN_HIGH;
-
-    // Determine mode preset
-    switch (this->state_.mode) {
-      case 1:
-        this->set_custom_preset_(display_mode_setpoint_.c_str());
-        break;
-
-      case 2:
-        this->set_custom_preset_(display_mode_continuous_.c_str());
-        break;
-
-      case 3:
-        this->set_custom_preset_(display_mode_smart_.c_str());
-        break;
-
-      case 4:
-        this->set_custom_preset_(display_mode_clothes_drying_.c_str());
-        break;
-
-      default:
-        this->set_custom_preset_(display_mode_smart_.c_str());
-        break;
-    }
-
-    this->target_humidity = int(this->state_.humiditySetpoint);
-    this->current_humidity = int(this->state_.currentHumidity);
-    this->current_temperature = this->state_.currentTemperature;
-#if defined(USE_MIDEA_DEHUM_SWING) || defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-    // Default to OFF
-    climate::ClimateSwingMode swing = climate::CLIMATE_SWING_OFF;
-
-#if defined(USE_MIDEA_DEHUM_SWING) && defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-    if (this->swing_state_ && this->horizontal_swing_state_) {
-        swing = climate::CLIMATE_SWING_BOTH;
-    } else if (this->horizontal_swing_state_) {
-        swing = climate::CLIMATE_SWING_HORIZONTAL;
-    } else if (this->swing_state_) {
-        swing = climate::CLIMATE_SWING_VERTICAL;
-    }
-#elif defined(USE_MIDEA_DEHUM_SWING)
-    if (this->swing_state_) {
-        swing = climate::CLIMATE_SWING_VERTICAL;
-    }
-#elif defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-    if (this->horizontal_swing_state_) {
-        swing = climate::CLIMATE_SWING_HORIZONTAL;
-    }
-#endif
-
-    this->swing_mode = swing;
-#endif
-
-    this->publish_state();  // Update main HA entity
-}
-
 void MideaDehumComponent::updateAndSendNetworkStatus(bool connected) {
   memset(networkStatus, 0, sizeof(networkStatus));
   if(connected) {
@@ -1319,119 +1180,177 @@ void MideaDehumComponent::sendMessage(uint8_t msgType, uint8_t agreementVersion,
   this->write_array(serialTxBuf, total_len);
 }
 
-// ===== Climate control =======================================================
-void MideaDehumComponent::control(const climate::ClimateCall &call) {
-  std::string requestedState = this->state_.powerOn ? "on" : "off";
-  uint8_t reqMode = this->state_.mode;
-  uint8_t reqFan = this->state_.fanSpeed;
-  uint8_t reqSet = this->state_.humiditySetpoint;
 
-  if (call.get_mode().has_value())
-    requestedState = *call.get_mode() == climate::CLIMATE_MODE_OFF ? "off" : "on";
- 
-#if ESPHOME_VERSION_CODE >= VERSION_CODE(2026,1,0)
-  StringRef requestedPreset = call.get_custom_preset();
-  if (!requestedPreset.empty()) {
-#else
-  if (const char *preset = call.get_custom_preset()) {
-      std::string requestedPreset(preset);
+void MideaDehumComponent::publishState() {
+#ifdef USE_MIDEA_DEHUM_CURRENT_HUMIDITY
+  if (this->current_humidity_sensor_ != nullptr)
+    this->current_humidity_sensor_->publish_state(this->state_.currentHumidity);
 #endif
-      if (requestedPreset == display_mode_setpoint_)
-        reqMode = 1;
-      else if (requestedPreset == display_mode_continuous_)
-        reqMode = 2;
-      else if (requestedPreset == display_mode_smart_)
-        reqMode = 3;
-      else if (requestedPreset == display_mode_clothes_drying_)
-        reqMode = 4;
-      else
-        reqMode = 3;  // default fallback
-  }
 
-  if (call.get_fan_mode().has_value()) {
-    switch (*call.get_fan_mode()) {
-      case climate::CLIMATE_FAN_LOW:    reqFan = 40; break;
-      case climate::CLIMATE_FAN_MEDIUM: reqFan = 60; break;
-      case climate::CLIMATE_FAN_HIGH:   reqFan = 80; break;
-      default:                          reqFan = 60; break;
+#ifdef USE_MIDEA_DEHUM_CURRENT_TEMPERATURE
+  if (this->current_temperature_sensor_ != nullptr)
+    this->current_temperature_sensor_->publish_state(this->state_.currentTemperature);
+#endif
+
+#ifdef USE_MIDEA_DEHUM_POWER
+  if (this->power_switch_ != nullptr)
+    this->power_switch_->publish_state(this->state_.powerOn);
+#endif
+
+#ifdef USE_MIDEA_DEHUM_SWING
+  if (this->swing_switch_ != nullptr)
+    this->swing_switch_->publish_state(this->swing_state_);
+#endif
+
+#ifdef USE_MIDEA_DEHUM_HORIZONTAL_SWING
+  if (this->horizontal_swing_switch_ != nullptr)
+    this->horizontal_swing_switch_->publish_state(this->horizontal_swing_state_);
+#endif
+
+#ifdef USE_MIDEA_DEHUM_MODE_SELECT
+  if (this->mode_select_ != nullptr) {
+    std::string mode_str = "Smart";
+    switch (this->state_.mode) {
+      case 1: mode_str = "Setpoint"; break;
+      case 2: mode_str = "Continuous"; break;
+      case 3: mode_str = "Smart"; break;
+      case 4: mode_str = "Clothes Drying"; break;
+    }
+    if (this->mode_select_->state != mode_str) {
+      this->mode_select_->publish_state(mode_str);
     }
   }
+#endif
 
-if (call.get_target_humidity().has_value()) {
-  float h = *call.get_target_humidity();
-  if (h >= 30.0f && h <= 99.0f)
-    reqSet = (uint8_t) std::round(h);
+#ifdef USE_MIDEA_DEHUM_FAN_SPEED_SELECT
+  if (this->fan_speed_select_ != nullptr) {
+    std::string fan_str = "Medium";
+    if (this->state_.fanSpeed <= 50) fan_str = "Low";
+    else if (this->state_.fanSpeed <= 70) fan_str = "Medium";
+    else fan_str = "High";
+
+    if (this->fan_speed_select_->state != fan_str) {
+      this->fan_speed_select_->publish_state(fan_str);
+    }
+  }
+#endif
+
+#ifdef USE_MIDEA_DEHUM_HUMIDITY_SETPOINT
+  if (this->humidity_setpoint_number_ != nullptr)
+    this->humidity_setpoint_number_->publish_state(this->state_.humiditySetpoint);
+#endif
 }
 
-#if defined(USE_MIDEA_DEHUM_SWING) || defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-  if (call.get_swing_mode().has_value()) {
-
-#if defined(USE_MIDEA_DEHUM_SWING)
-    bool old_vertical = this->swing_state_;
-#endif
-#if defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-    bool old_horizontal = this->horizontal_swing_state_;
-#endif
-
-    switch (*call.get_swing_mode()) {
-      case climate::CLIMATE_SWING_OFF:
-#if defined(USE_MIDEA_DEHUM_SWING)
-        this->swing_state_ = false;
-#endif
-#if defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-        this->horizontal_swing_state_ = false;
-#endif
-        break;
-
-      case climate::CLIMATE_SWING_VERTICAL:
-#if defined(USE_MIDEA_DEHUM_SWING)
-        this->swing_state_ = true;
-#endif
-#if defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-        this->horizontal_swing_state_ = false;
-#endif
-        break;
-
-      case climate::CLIMATE_SWING_HORIZONTAL:
-#if defined(USE_MIDEA_DEHUM_SWING)
-        this->swing_state_ = false;
-#endif
-#if defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-        this->horizontal_swing_state_ = true;
-#endif
-        break;
-
-      case climate::CLIMATE_SWING_BOTH:
-#if defined(USE_MIDEA_DEHUM_SWING)
-        this->swing_state_ = true;
-#endif
-#if defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-        this->horizontal_swing_state_ = true;
-#endif
-        break;
-
-      default:
-        break;
-    }
-
-    bool changed = false;
-
-#if defined(USE_MIDEA_DEHUM_SWING)
-    changed |= (this->swing_state_ != old_vertical);
-#endif
-#if defined(USE_MIDEA_DEHUM_HORIZONTAL_SWING)
-    changed |= (this->horizontal_swing_state_ != old_horizontal);
-#endif
-
-    if (changed) {
-      this->sendSetStatus();
-      this->sendClimateState();
-    }
-  }
-#endif
-
-  this->handleStateUpdateRequest(requestedState, reqMode, reqFan, reqSet);
+#ifdef USE_MIDEA_DEHUM_POWER
+void MideaDehumComponent::set_power_switch(MideaPowerSwitch *s) {
+  this->power_switch_ = s;
+  if (s) s->set_parent(this);
 }
+void MideaDehumComponent::set_power_state(bool on) {
+  if (this->state_.powerOn == on) return;
+  this->state_.powerOn = on;
+  this->sendSetStatus();
+  this->publishState();
+}
+void MideaPowerSwitch::write_state(bool state) {
+  if (!this->parent_) return;
+  this->parent_->set_power_state(state);
+}
+#endif
+
+#ifdef USE_MIDEA_DEHUM_SWING
+void MideaDehumComponent::set_swing_switch(MideaSwingSwitch *s) {
+  this->swing_switch_ = s;
+  if (s) s->set_parent(this);
+}
+void MideaDehumComponent::set_swing_state(bool on) {
+  if (this->swing_state_ == on) return;
+  this->swing_state_ = on;
+  this->sendSetStatus();
+  this->publishState();
+}
+void MideaSwingSwitch::write_state(bool state) {
+  if (!this->parent_) return;
+  this->parent_->set_swing_state(state);
+}
+#endif
+
+#ifdef USE_MIDEA_DEHUM_HORIZONTAL_SWING
+void MideaDehumComponent::set_horizontal_swing_switch(MideaHorizontalSwingSwitch *s) {
+  this->horizontal_swing_switch_ = s;
+  if (s) s->set_parent(this);
+}
+void MideaDehumComponent::set_horizontal_swing_state(bool on) {
+  if (this->horizontal_swing_state_ == on) return;
+  this->horizontal_swing_state_ = on;
+  this->sendSetStatus();
+  this->publishState();
+}
+void MideaHorizontalSwingSwitch::write_state(bool state) {
+  if (!this->parent_) return;
+  this->parent_->set_horizontal_swing_state(state);
+}
+#endif
+
+#ifdef USE_MIDEA_DEHUM_MODE_SELECT
+void MideaDehumComponent::set_mode_select(MideaModeSelect *s) {
+  this->mode_select_ = s;
+  if (s) s->set_parent(this);
+}
+void MideaDehumComponent::set_mode(uint8_t mode) {
+  if (this->state_.mode == mode) return;
+  this->state_.mode = mode;
+  this->sendSetStatus();
+  this->publishState();
+}
+void MideaModeSelect::control(const std::string &value) {
+  if (!this->parent_) return;
+  uint8_t mode = 3;
+  if (value == "Setpoint") mode = 1;
+  else if (value == "Continuous") mode = 2;
+  else if (value == "Smart") mode = 3;
+  else if (value == "Clothes Drying") mode = 4;
+  this->parent_->set_mode(mode);
+}
+#endif
+
+#ifdef USE_MIDEA_DEHUM_FAN_SPEED_SELECT
+void MideaDehumComponent::set_fan_speed_select(MideaFanSpeedSelect *s) {
+  this->fan_speed_select_ = s;
+  if (s) s->set_parent(this);
+}
+void MideaDehumComponent::set_fan_speed(uint8_t fan_speed) {
+  if (this->state_.fanSpeed == fan_speed) return;
+  this->state_.fanSpeed = fan_speed;
+  this->sendSetStatus();
+  this->publishState();
+}
+void MideaFanSpeedSelect::control(const std::string &value) {
+  if (!this->parent_) return;
+  uint8_t fan_speed = 60;
+  if (value == "Low") fan_speed = 40;
+  else if (value == "Medium") fan_speed = 60;
+  else if (value == "High") fan_speed = 80;
+  this->parent_->set_fan_speed(fan_speed);
+}
+#endif
+
+#ifdef USE_MIDEA_DEHUM_HUMIDITY_SETPOINT
+void MideaDehumComponent::set_humidity_setpoint_number(MideaHumiditySetpointNumber *n) {
+  this->humidity_setpoint_number_ = n;
+  if (n) n->set_parent(this);
+}
+void MideaDehumComponent::set_humidity_setpoint(uint8_t humidity_setpoint) {
+  if (this->state_.humiditySetpoint == humidity_setpoint) return;
+  this->state_.humiditySetpoint = humidity_setpoint;
+  this->sendSetStatus();
+  this->publishState();
+}
+void MideaHumiditySetpointNumber::control(float value) {
+  if (!this->parent_) return;
+  this->parent_->set_humidity_setpoint(static_cast<uint8_t>(value));
+}
+#endif
 
 }  // namespace midea_dehum
 }  // namespace esphome
