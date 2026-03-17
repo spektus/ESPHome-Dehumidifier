@@ -1,3 +1,5 @@
+#include <vector>
+#include <cstring>
 #pragma once
 
 #include <cstdint>
@@ -130,7 +132,7 @@ class MideaSleepSwitch : public switch_::Switch, public Component {
 #endif
 
 #ifdef USE_MIDEA_DEHUM_CAPABILITIES
-class MideaCapabilitiesTextSensor : public text_sensor::TextSensor, public Component {
+class MideaCapabilitiesTextSensor : public esphome::text_sensor::TextSensor, public Component {
  public:
   void set_parent(class MideaDehumComponent *parent) { this->parent_ = parent; }
  protected:
