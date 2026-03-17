@@ -4,6 +4,7 @@
 #include "esphome/core/preferences.h"
 #include "esphome/core/version.h"
 #include <cmath>
+#include <algorithm>
 
 namespace esphome {
 namespace midea_dehum {
@@ -466,14 +467,9 @@ void esphome::midea_dehum::MideaDehumComponent::update_capabilities_text(
   }
 
   for (const auto &opt : options) {
-    bool found = false;
-    for (const auto &ex : existing) {
-      if (ex == opt) {
-        found = true;
-        break;
-      }
+    if (std::find(existing.begin(), existing.end(), opt) == existing.end()) {
+      existing.push_back(opt);
     }
-    if (!found) existing.push_back(opt);
   }
 
   std::string joined;
