@@ -807,27 +807,30 @@ void MideaDehumComponent::parseState() {
   if (new_humidity_set != this->state_.humiditySetpoint) { this->state_.humiditySetpoint = new_humidity_set; updated = true; }
   if (new_humidity != this->state_.currentHumidity) { this->state_.currentHumidity = new_humidity; updated = true; }
   if (fabs(new_temp - this->state_.currentTemperature) > 0.1f) { this->state_.currentTemperature = new_temp; updated = true; }
-  if (new_error != this->error_state_) { this->error_state_ = new_error; updated = true; }
 
   if (updated || first_run) {
     this->publishState();
   }
 
 #if defined(USE_MIDEA_DEHUM_ERROR) || defined(USE_MIDEA_DEHUM_BUCKET)
-    if (first_run || this->error_state_ != new_error) {
-      this->error_state_ = new_error;
+  if (first_run || this->error_state_ != new_error) {
+    this->error_state_ = new_error;
 #ifdef USE_MIDEA_DEHUM_ERROR
-      if(this->error_sensor_) {this->error_sensor_->publish_state(this->error_state_);}
-#endif
+    if (this->error_sensor_) {
+      this->error_sensor_->publish_state(this->error_state_);
     }
+#endif
+  }
 #endif
 
 #ifdef USE_MIDEA_DEHUM_BUCKET
-    bool bucket_full = (this->error_state_ == 38);
-    if (first_run || bucket_full != this->bucket_full_state_) {
-      this->bucket_full_state_ = bucket_full;
-      if (this->bucket_full_sensor_) this->bucket_full_sensor_->publish_state(bucket_full);
+  bool bucket_full = (new_error == 38);
+  if (first_run || bucket_full != this->bucket_full_state_) {
+    this->bucket_full_state_ = bucket_full;
+    if (this->bucket_full_sensor_) {
+      this->bucket_full_sensor_->publish_state(bucket_full);
     }
+  }
 #endif
 
 #ifdef USE_MIDEA_DEHUM_TIMER
