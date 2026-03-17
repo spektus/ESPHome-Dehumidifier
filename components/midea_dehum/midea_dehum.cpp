@@ -713,7 +713,7 @@ void MideaDehumComponent::processPacket(uint8_t *data, size_t len) {
       this->protocol_version_ = data[7];
       this->device_info_known_ = true;
     }
-    this->parseState();
+    this->parseState(data, len);
 #ifdef USE_MIDEA_DEHUM_HANDSHAKE
     if(!this->handshake_done_){
       this->handshake_done_ = true;
@@ -781,24 +781,25 @@ void MideaDehumComponent::processPacket(uint8_t *data, size_t len) {
 }
 
 // Get the status sent from device
-void MideaDehumComponent::parseState() {
+void MideaDehumComponent::parseState(const uint8_t *data, size_t len) {
+  if (len < 32) return;
   bool updated = false;
 
   // --- Parse core operating parameters ---
-  bool new_power = (serialRxBuf[11] & 0x01) != 0;
-  uint8_t new_mode = serialRxBuf[12] & 0x0F;
-  uint8_t new_fan = serialRxBuf[13] & 0x7F;
-  uint8_t new_humidity_set = (serialRxBuf[17] > 100) ? 99 : serialRxBuf[17];
+  bool new_power = (data[11] & 0x01) != 0;
+  uint8_t new_mode = data[12] & 0x0F;
+  uint8_t new_fan = data[13] & 0x7F;
+  uint8_t new_humidity_set = (data[17] > 100) ? 99 : data[17];
 
   // --- Environmental readings ---
-  uint8_t new_humidity = serialRxBuf[26];
-  float temp = (static_cast<int>(serialRxBuf[27]) - 50) / 2.0f;
+  uint8_t new_humidity = data[26];
+  float temp = (static_cast<int>(data[27]) - 50) / 2.0f;
   if (temp < -19.0f) temp = -20.0f;
   if (temp > 50.0f)  temp = 50.0f;
-  float temperature_decimal = (serialRxBuf[28] & 0x0F) * 0.1f;
+  float temperature_decimal = (data[28] & 0x0F) * 0.1f;
   if (temp >= 0.0f) temp += temperature_decimal; else temp -= temperature_decimal;
   float new_temp = temp;
-  uint8_t new_error = serialRxBuf[31];
+  uint8_t new_error = data[31];
   
   // --- Compare and update core state fields ---
   if (new_power != this->state_.powerOn) { this->state_.powerOn = new_power; updated = true; }
@@ -832,9 +833,9 @@ void MideaDehumComponent::parseState() {
 
 #ifdef USE_MIDEA_DEHUM_TIMER
   // --- Parse timer fields from payload bytes 14..16 ---
-  const uint8_t on_raw  = serialRxBuf[14];
-  const uint8_t off_raw = serialRxBuf[15];
-  const uint8_t ext_raw = serialRxBuf[16];
+  const uint8_t on_raw  = data[14];
+  const uint8_t off_raw = data[15];
+  const uint8_t ext_raw = data[16];
 
   const bool on_timer_set  = (on_raw  & 0x80) != 0;
   const bool off_timer_set = (off_raw & 0x80) != 0;
@@ -883,7 +884,7 @@ void MideaDehumComponent::parseState() {
   
   // --- Panel light / brightness class (bits 7–6) ---
 #ifdef USE_MIDEA_DEHUM_LIGHT
-  uint8_t new_light_class = (serialRxBuf[19] & 0xC0) >> 6;
+  uint8_t new_light_class = (data[19] & 0xC0) >> 6;
   if (new_light_class != this->light_class_ || first_run) {
     this->light_class_ = new_light_class;
     if (this->light_select_) {
@@ -898,7 +899,7 @@ void MideaDehumComponent::parseState() {
 
   // --- Ionizer (bit 6) ---
 #ifdef USE_MIDEA_DEHUM_ION
-  bool new_ion_state = (serialRxBuf[19] & 0x40) != 0;
+  bool new_ion_state = (data[19] & 0x40) != 0;
   if (new_ion_state != this->ion_state_ || first_run) {
     if(this->state_.powerOn) {
       this->ion_state_ = new_ion_state;
@@ -909,7 +910,7 @@ void MideaDehumComponent::parseState() {
 
   // --- Sleep mode (bit 5) ---
 #ifdef USE_MIDEA_DEHUM_SLEEP
-  bool new_sleep_state = (serialRxBuf[19] & 0x20) != 0;
+  bool new_sleep_state = (data[19] & 0x20) != 0;
   if (new_sleep_state != this->sleep_state_  || first_run) {
     if(this->state_.powerOn) {
       this->sleep_state_ = new_sleep_state;
@@ -920,7 +921,7 @@ void MideaDehumComponent::parseState() {
 
   // --- Optional: Pump bits (3–4) ---
 #ifdef USE_MIDEA_DEHUM_PUMP
-  bool new_pump_state = (serialRxBuf[19] & 0x08) != 0;
+  bool new_pump_state = (data[19] & 0x08) != 0;
   if (new_pump_state != this->pump_state_  || first_run) {
     if(this->state_.powerOn) {
       this->pump_state_ = new_pump_state;
@@ -931,7 +932,7 @@ void MideaDehumComponent::parseState() {
 
   // --- Filter cleaning bit (7) ---
 #ifdef USE_MIDEA_DEHUM_FILTER
-  bool new_filter_request = (serialRxBuf[19] & 0x80) >> 7;
+  bool new_filter_request = (data[19] & 0x80) >> 7;
   if (new_filter_request != this->filter_request_state_  || first_run) {
     this->filter_request_state_ = new_filter_request;
     if (this->filter_request_sensor_) {
@@ -942,7 +943,7 @@ void MideaDehumComponent::parseState() {
 
   // --- Tank / Water Level (Byte 20, bit 0-6) ---
 #ifdef USE_MIDEA_DEHUM_TANK_LEVEL
-  uint8_t tank_byte = serialRxBuf[20];
+  uint8_t tank_byte = data[20];
   uint8_t new_tank_level = tank_byte & 0x7F;
 
   if (new_tank_level != this->tank_level_  || first_run) {
@@ -954,7 +955,7 @@ void MideaDehumComponent::parseState() {
 
   // --- Defrosting (Byte 20, bit 7) ---
 #ifdef USE_MIDEA_DEHUM_DEFROST
-  bool new_defrost = (serialRxBuf[20] & 0x80) != 0;
+  bool new_defrost = (data[20] & 0x80) != 0;
 
   if (new_defrost != this->defrost_state_ || first_run) {
     this->defrost_state_ = new_defrost;
@@ -965,8 +966,8 @@ void MideaDehumComponent::parseState() {
 
   // --- PM2.5 value (bytes 23–24) ---
 #ifdef USE_MIDEA_DEHUM_PM25
-  uint16_t new_pm25_value = static_cast<uint16_t>(serialRxBuf[23]) |
-                        (static_cast<uint16_t>(serialRxBuf[24]) << 8);
+  uint16_t new_pm25_value = static_cast<uint16_t>(data[23]) |
+                        (static_cast<uint16_t>(data[24]) << 8);
   if (new_pm25_value != this->pm25_ || first_run) {
     this->pm25_ = new_pm25_value;
     if (this->pm25_sensor_) {
@@ -977,7 +978,7 @@ void MideaDehumComponent::parseState() {
 
   // --- Horizontal swing (byte 29, bit 4) ---
 #ifdef USE_MIDEA_DEHUM_HORIZONTAL_SWING
-  bool new_horizontal_swing_state = (serialRxBuf[29] & 0x10) != 0;
+  bool new_horizontal_swing_state = (data[29] & 0x10) != 0;
   if (new_horizontal_swing_state != this->horizontal_swing_state_ || first_run) { 
     if(this->state_.powerOn) {
       this->horizontal_swing_state_ = new_horizontal_swing_state;
@@ -988,7 +989,7 @@ void MideaDehumComponent::parseState() {
 
   // --- Vertical swing (byte 29, bit 5) ---
 #ifdef USE_MIDEA_DEHUM_SWING
-  bool new_swing_state = (serialRxBuf[29] & 0x20) != 0;
+  bool new_swing_state = (data[29] & 0x20) != 0;
   if (new_swing_state != this->swing_state_ || first_run) { 
     if(this->state_.powerOn) {
       this->swing_state_ = new_swing_state;
