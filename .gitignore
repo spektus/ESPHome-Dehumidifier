@@ -1,3 +1,8 @@
 .vscode/settings.json
 .esphome/
 secrets.yaml
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
