@@ -283,6 +283,11 @@ class MideaDehumComponent : public uart::UARTDevice, public Component {
   void loop() override;
 
   void parseState();
+  void parseCoreState(bool &updated);
+  void parseEnvironmentalReadings(bool &updated);
+  void parseTimerFields();
+  void parseFeatures();
+
   void sendSetStatus();
 
 #ifdef USE_MIDEA_DEHUM_CURRENT_HUMIDITY
