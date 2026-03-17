@@ -1001,27 +1001,8 @@ void MideaDehumComponent::parseState() {
   first_run = false;
 }
 
-void MideaDehumComponent::sendSetStatus() {
-  memset(setStatusCommand, 0, sizeof(setStatusCommand));
-
-  // --- Command header ---
-  setStatusCommand[0] = 0x48;  // Write command marker
-
-  // --- Power and beep (byte 1) ---
-  setStatusCommand[1] = this->state_.powerOn ? 0x01 : 0x00;
-#ifdef USE_MIDEA_DEHUM_BEEP
-  if (this->beep_state_) setStatusCommand[1] |= 0x40;  // bit6 = beep prompt
-#endif
-
-  // --- Mode (byte 2) ---
-  uint8_t mode = this->state_.mode;
-  if (mode < 1 || mode > 4) mode = 3;
-  setStatusCommand[2] = mode & 0x0F;
-
-  // --- Fan speed (byte 3) ---
-  setStatusCommand[3] = (uint8_t)this->state_.fanSpeed;
-
 #ifdef USE_MIDEA_DEHUM_TIMER
+void MideaDehumComponent::applyTimerToStatus(uint8_t *setStatusCommand) {
   uint8_t on_raw  = this->last_on_raw_;
   uint8_t off_raw = this->last_off_raw_;
   uint8_t ext_raw = this->last_ext_raw_;
@@ -1073,7 +1054,31 @@ void MideaDehumComponent::sendSetStatus() {
   } else {
     setStatusCommand[3] &= static_cast<uint8_t>(~0x80);
   }
+}
+#endif
 
+void MideaDehumComponent::sendSetStatus() {
+  memset(setStatusCommand, 0, sizeof(setStatusCommand));
+
+  // --- Command header ---
+  setStatusCommand[0] = 0x48;  // Write command marker
+
+  // --- Power and beep (byte 1) ---
+  setStatusCommand[1] = this->state_.powerOn ? 0x01 : 0x00;
+#ifdef USE_MIDEA_DEHUM_BEEP
+  if (this->beep_state_) setStatusCommand[1] |= 0x40;  // bit6 = beep prompt
+#endif
+
+  // --- Mode (byte 2) ---
+  uint8_t mode = this->state_.mode;
+  if (mode < 1 || mode > 4) mode = 3;
+  setStatusCommand[2] = mode & 0x0F;
+
+  // --- Fan speed (byte 3) ---
+  setStatusCommand[3] = (uint8_t)this->state_.fanSpeed;
+
+#ifdef USE_MIDEA_DEHUM_TIMER
+  this->applyTimerToStatus(setStatusCommand);
 #endif
 
   // --- Target humidity (byte 7) ---

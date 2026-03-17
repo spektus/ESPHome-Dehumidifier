@@ -414,6 +414,8 @@ class MideaDehumComponent : public uart::UARTDevice, public Component {
   uint8_t timer_on_raw_{0};
   uint8_t timer_off_raw_{0};
   uint8_t timer_ext_raw_{0};
+
+  void applyTimerToStatus(uint8_t *setStatusCommand);
 #endif
 #ifdef USE_MIDEA_DEHUM_CAPABILITIES
   MideaCapabilitiesTextSensor *capabilities_text_{nullptr};
