@@ -1,3 +1,4 @@
 .vscode/settings.json
 .esphome/
 secrets.yaml
+tests/run_tests
