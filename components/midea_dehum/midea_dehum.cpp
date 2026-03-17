@@ -300,6 +300,83 @@ static const CapabilityMap CAPABILITY_TABLE[] = {
   {0x43, 0x00, "Breeze control"}
 };
 
+static std::string decodeModeSelection(uint8_t val) {
+  switch (val) {
+    case 0: return " → Cool+Dry+Auto";
+    case 1: return " → Cool+Heat+Dry+Auto";
+    case 2: return " → Heat+Auto";
+    case 3: return " → Cool only";
+    default: return " → Unknown";
+  }
+}
+
+static std::string decodeSwingControl(uint8_t val) {
+  switch (val) {
+    case 0: return " → Up/Down";
+    case 1: return " → Both directions";
+    case 2: return " → None";
+    case 3: return " → Left/Right only";
+    default: return " → Unknown";
+  }
+}
+
+static std::string decodePowerCalibration(uint8_t val) {
+  switch (val) {
+    case 2: return " → Calibration supported";
+    case 3: return " → Calibration+Setting supported";
+    default: return " → Not supported";
+  }
+}
+
+static std::string decodeTurbo(uint8_t val) {
+  switch (val) {
+    case 0: return " → Cool only";
+    case 1: return " → Heat+Cool";
+    case 2: return " → Disabled";
+    case 3: return " → Heat only";
+    default: return " → Unknown";
+  }
+}
+
+static std::string decodeHumidityControl(uint8_t val, bool device_info_known, uint8_t appliance_type) {
+  if (device_info_known && appliance_type == 0xA1) {
+    // Dehumidifier-specific interpretation
+    switch (val) {
+      case 0: return " → None";
+      case 1: return " → Manual + Auto";
+      case 2: return " → val2";
+      case 3: return " → val3";
+      default: return " → Unknown";
+    }
+  } else {
+    // Default (AC or other appliance type)
+    switch (val) {
+      case 0: return " → None";
+      case 1: return " → Auto only";
+      case 2: return " → Auto+Manual";
+      case 3: return " → Manual only";
+      default: return " → Unknown";
+    }
+  }
+}
+
+static std::string decodeTemperatureRange(const uint8_t *data, size_t i, uint8_t len) {
+  if (len >= 6) {
+    float min_cool = data[i + 3] / 2.0f;
+    float max_cool = data[i + 4] / 2.0f;
+    float min_auto = data[i + 5] / 2.0f;
+    float max_auto = data[i + 6] / 2.0f;
+    float min_heat = data[i + 7] / 2.0f;
+    float max_heat = data[i + 8] / 2.0f;
+    char buf[64];
+    snprintf(buf, sizeof(buf),
+             " → Cool %.1f–%.1f°C, Auto %.1f–%.1f°C, Heat %.1f–%.1f°C",
+             min_cool, max_cool, min_auto, max_auto, min_heat, max_heat);
+    return std::string(buf);
+  }
+  return " → Invalid range";
+}
+
 void MideaDehumComponent::processCapabilitiesPacket(uint8_t *data, size_t length) {
   if (length < 14) return;
   std::vector<std::string> caps;
@@ -327,95 +404,29 @@ void MideaDehumComponent::processCapabilitiesPacket(uint8_t *data, size_t length
 
       // Decode multi-valued capabilities
       switch (id) {
-        case 0x14: {  // Mode selection
-          const char *modes[] = {"Cool", "Heat", "Dry", "Auto"};
-          std::string mode_str;
-          switch (val) {
-            case 0: mode_str = "Cool+Dry+Auto"; break;
-            case 1: mode_str = "Cool+Heat+Dry+Auto"; break;
-            case 2: mode_str = "Heat+Auto"; break;
-            case 3: mode_str = "Cool only"; break;
-            default: mode_str = "Unknown"; break;
-          }
-          desc += " → " + mode_str;
+        case 0x14:  // Mode selection
+          desc += decodeModeSelection(val);
           break;
-        }
 
-        case 0x15: {  // Swing control
-          const char *swings[] = {"UpDown", "Both", "None", "LeftRight"};
-          std::string sw;
-          switch (val) {
-            case 0: sw = "Up/Down"; break;
-            case 1: sw = "Both directions"; break;
-            case 2: sw = "None"; break;
-            case 3: sw = "Left/Right only"; break;
-            default: sw = "Unknown"; break;
-          }
-          desc += " → " + sw;
+        case 0x15:  // Swing control
+          desc += decodeSwingControl(val);
           break;
-        }
 
-        case 0x16: {  // Power calibration
-          switch (val) {
-            case 2: desc += " → Calibration supported"; break;
-            case 3: desc += " → Calibration+Setting supported"; break;
-            default: desc += " → Not supported"; break;
-          }
+        case 0x16:  // Power calibration
+          desc += decodePowerCalibration(val);
           break;
-        }
 
-        case 0x1A: {  // Turbo
-          switch (val) {
-            case 0: desc += " → Cool only"; break;
-            case 1: desc += " → Heat+Cool"; break;
-            case 2: desc += " → Disabled"; break;
-            case 3: desc += " → Heat only"; break;
-            default: desc += " → Unknown"; break;
-          }
+        case 0x1A:  // Turbo
+          desc += decodeTurbo(val);
           break;
-        }
-        
-        case 0x1F: {  // Humidity control
-          if (this->device_info_known_ && this->appliance_type_ == 0xA1) {
-            // Dehumidifier-specific interpretation
-            switch (val) {
-              case 0: desc += " → None"; break;
-              case 1: desc += " → Manual + Auto"; break;
-              case 2: desc += " → val2"; break;
-              case 3: desc += " → val3"; break;
-              default: desc += " → Unknown"; break;
-            }
-          } else {
-            // Default (AC or other appliance type)
-            switch (val) {
-              case 0: desc += " → None"; break;
-              case 1: desc += " → Auto only"; break;
-              case 2: desc += " → Auto+Manual"; break;
-              case 3: desc += " → Manual only"; break;
-              default: desc += " → Unknown"; break;
-            }
-          }
-          break;
-        }
 
-        case 0x25: {  // Temperature range (multi-value)
-          if (len >= 6) {
-            float min_cool = data[i + 3] / 2.0f;
-            float max_cool = data[i + 4] / 2.0f;
-            float min_auto = data[i + 5] / 2.0f;
-            float max_auto = data[i + 6] / 2.0f;
-            float min_heat = data[i + 7] / 2.0f;
-            float max_heat = data[i + 8] / 2.0f;
-            char buf[64];
-            snprintf(buf, sizeof(buf),
-                     " → Cool %.1f–%.1f°C, Auto %.1f–%.1f°C, Heat %.1f–%.1f°C",
-                     min_cool, max_cool, min_auto, max_auto, min_heat, max_heat);
-            desc += buf;
-          } else {
-            desc += " → Invalid range";
-          }
+        case 0x1F:  // Humidity control
+          desc += decodeHumidityControl(val, this->device_info_known_, this->appliance_type_);
           break;
-        }
+
+        case 0x25:  // Temperature range (multi-value)
+          desc += decodeTemperatureRange(data, i, len);
+          break;
 
         default:
           // Generic numeric output for unknown value meanings
