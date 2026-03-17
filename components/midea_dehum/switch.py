@@ -16,13 +16,26 @@ CONF_BEEP = "beep"
 CONF_SLEEP = "sleep"
 CONF_PUMP = "pump"
 
+
+MideaPowerSwitch = midea_dehum_ns.class_("MideaPowerSwitch", switch.Switch, cg.Component)
+MideaSwingSwitch = midea_dehum_ns.class_("MideaSwingSwitch", switch.Switch, cg.Component)
+MideaHorizontalSwingSwitch = midea_dehum_ns.class_("MideaHorizontalSwingSwitch", switch.Switch, cg.Component)
+
+CONF_POWER = "power"
+CONF_SWING = "swing"
+CONF_HORIZONTAL_SWING = "horizontal_swing"
+
 CONFIG_SCHEMA = cv.Schema({
     cv.Required(CONF_MIDEA_DEHUM_ID): cv.use_id(MideaDehum),
     cv.Optional(CONF_IONIZER): switch.switch_schema(MideaIonSwitch, icon="mdi:air-purifier"),
     cv.Optional(CONF_BEEP): switch.switch_schema(MideaBeepSwitch, icon="mdi:volume-high"),
     cv.Optional(CONF_SLEEP): switch.switch_schema(MideaSleepSwitch, icon="mdi:sleep"),
     cv.Optional(CONF_PUMP): switch.switch_schema(MideaPumpSwitch, icon="mdi:water-pump"),
+    cv.Optional(CONF_POWER): switch.switch_schema(MideaPowerSwitch, icon="mdi:power"),
+    cv.Optional(CONF_SWING): switch.switch_schema(MideaSwingSwitch, icon="mdi:arrow-up-down"),
+    cv.Optional(CONF_HORIZONTAL_SWING): switch.switch_schema(MideaHorizontalSwingSwitch, icon="mdi:arrow-left-right"),
 })
+
 
 async def to_code(config):
     parent = await cg.get_variable(config[CONF_MIDEA_DEHUM_ID])
@@ -46,3 +59,18 @@ async def to_code(config):
         cg.add_define("USE_MIDEA_DEHUM_SLEEP")
         slsw = await switch.new_switch(config[CONF_SLEEP])
         cg.add(parent.set_sleep_switch(slsw))
+
+    if CONF_POWER in config:
+        cg.add_define("USE_MIDEA_DEHUM_POWER")
+        powsw = await switch.new_switch(config[CONF_POWER])
+        cg.add(parent.set_power_switch(powsw))
+
+    if CONF_SWING in config:
+        cg.add_define("USE_MIDEA_DEHUM_SWING")
+        swingsw = await switch.new_switch(config[CONF_SWING])
+        cg.add(parent.set_swing_switch(swingsw))
+
+    if CONF_HORIZONTAL_SWING in config:
+        cg.add_define("USE_MIDEA_DEHUM_HORIZONTAL_SWING")
+        hswingsw = await switch.new_switch(config[CONF_HORIZONTAL_SWING])
+        cg.add(parent.set_horizontal_swing_switch(hswingsw))

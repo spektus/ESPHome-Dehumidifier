@@ -7,3 +7,4 @@ optional:
   - switch.py
   - button.py
   - number.py
+  - select.py

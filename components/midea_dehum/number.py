@@ -11,6 +11,11 @@ MideaTimerNumber = midea_dehum_ns.class_("MideaTimerNumber", number.Number, cg.C
 
 CONF_TIMER = "timer"
 
+
+MideaHumiditySetpointNumber = midea_dehum_ns.class_("MideaHumiditySetpointNumber", number.Number, cg.Component)
+
+CONF_HUMIDITY_SETPOINT = "humidity_setpoint"
+
 CONFIG_SCHEMA = cv.Schema({
     cv.Required(CONF_MIDEA_DEHUM_ID): cv.use_id(MideaDehum),
     cv.Optional(CONF_TIMER): number.number_schema(
@@ -19,7 +24,14 @@ CONFIG_SCHEMA = cv.Schema({
         icon=ICON_TIMER,
         device_class="duration",
     ),
+    cv.Optional(CONF_HUMIDITY_SETPOINT): number.number_schema(
+        MideaHumiditySetpointNumber,
+        unit_of_measurement="%",
+        icon="mdi:water-percent",
+        device_class="humidity",
+    ),
 })
+
 
 async def to_code(config):
     parent = await cg.get_variable(config[CONF_MIDEA_DEHUM_ID])
@@ -33,3 +45,13 @@ async def to_code(config):
             step=0.5,
         )
         cg.add(parent.set_timer_number(n))
+
+    if CONF_HUMIDITY_SETPOINT in config:
+        cg.add_define("USE_MIDEA_DEHUM_HUMIDITY_SETPOINT")
+        n = await number.new_number(
+            config[CONF_HUMIDITY_SETPOINT],
+            min_value=35,
+            max_value=85,
+            step=5,
+        )
+        cg.add(parent.set_humidity_setpoint_number(n))
