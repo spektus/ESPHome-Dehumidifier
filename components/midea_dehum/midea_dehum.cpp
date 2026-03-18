@@ -767,14 +767,6 @@ void MideaDehumComponent::performHandshakeStep() {
 #endif
 // Process of the RX Packet received
 void MideaDehumComponent::processPacket(uint8_t *data, size_t len) {
-  // Pretty print packet
-  std::string hex_str;
-  hex_str.reserve(len * 3);
-  for (size_t i = 0; i < len; i++) {
-    char buf[4];
-    snprintf(buf, sizeof(buf), "%02X ", data[i]);
-    hex_str += buf;
-  }
   // State response
   if (data[10] == 0xC8) {
     if (!this->device_info_known_) {
